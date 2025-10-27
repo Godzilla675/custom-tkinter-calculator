@@ -1,21 +1,33 @@
 #!/usr/bin/env python3
 """
-Advanced Custom Tkinter Calculator
+Advanced Scientific Calculator with Graphing and Equation Solving
 Features:
-- Basic arithmetic operations
-- Scientific functions (sin, cos, tan, log, ln, etc.)
-- Memory functions (M+, M-, MR, MC)
+- Enhanced modern UI with tabs
+- Basic and advanced arithmetic operations
+- Complete scientific functions
+- Graphing capabilities (2D function plotting)
+- Equation solver (algebraic, quadratic, polynomial)
+- Matrix operations
+- Unit conversions
+- Memory functions
 - Calculation history
 - Dark/Light theme switching
 - Keyboard support
-- Error handling
 """
 
 import customtkinter as ctk
 import math
 import ast
 import operator
-from typing import List, Optional
+from typing import List, Optional, Tuple
+import numpy as np
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+import sympy as sp
+from sympy import symbols, solve, simplify, expand, factor, diff, integrate
 
 
 def safe_eval(expression: str) -> float:
@@ -23,7 +35,6 @@ def safe_eval(expression: str) -> float:
     Safely evaluate a mathematical expression without using eval().
     Only allows mathematical operations and prevents code injection.
     """
-    # Define allowed operations
     allowed_operators = {
         ast.Add: operator.add,
         ast.Sub: operator.sub,
@@ -36,9 +47,9 @@ def safe_eval(expression: str) -> float:
     
     def eval_node(node):
         """Recursively evaluate AST nodes."""
-        if isinstance(node, ast.Constant):  # Python 3.8+
+        if isinstance(node, ast.Constant):
             return node.value
-        elif isinstance(node, ast.Num):  # Fallback for older Python
+        elif isinstance(node, ast.Num):
             return node.n
         elif isinstance(node, ast.BinOp):
             left = eval_node(node.left)
@@ -57,24 +68,21 @@ def safe_eval(expression: str) -> float:
             raise ValueError(f"Unsupported expression: {type(node).__name__}")
     
     try:
-        # Parse the expression
         tree = ast.parse(expression, mode='eval')
-        # Evaluate it safely
         return eval_node(tree.body)
     except (SyntaxError, ValueError, TypeError) as e:
         raise ValueError(f"Invalid expression: {str(e)}")
 
 
-class Calculator(ctk.CTk):
-    """Main calculator application class."""
+class AdvancedCalculator(ctk.CTk):
+    """Main advanced calculator application class with tabs."""
     
     def __init__(self):
         super().__init__()
         
         # Window configuration
-        self.title("Advanced Calculator")
-        self.geometry("500x700")
-        self.resizable(False, False)
+        self.title("Advanced Scientific Calculator")
+        self.geometry("900x750")
         
         # Set theme
         ctk.set_appearance_mode("dark")
@@ -85,148 +93,617 @@ class Calculator(ctk.CTk):
         self.result_displayed = False
         self.memory = 0
         self.history: List[str] = []
-        self.scientific_mode = False
+        self.angle_mode = "deg"  # deg or rad
         
-        # Create UI
-        self.create_widgets()
+        # Create main UI
+        self.create_main_ui()
         
         # Bind keyboard events
         self.bind('<Key>', self.handle_keypress)
         
-    def create_widgets(self):
-        """Create all UI widgets."""
-        # Main container
-        main_frame = ctk.CTkFrame(self)
-        main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+    def create_main_ui(self):
+        """Create the main tabbed interface."""
+        # Header with theme toggle
+        header = ctk.CTkFrame(self, height=50)
+        header.pack(fill="x", padx=10, pady=(10, 5))
         
-        # Top bar with mode toggle and theme toggle
-        top_bar = ctk.CTkFrame(main_frame)
-        top_bar.pack(fill="x", padx=5, pady=5)
-        
-        self.mode_button = ctk.CTkButton(
-            top_bar,
-            text="Scientific",
-            width=100,
-            command=self.toggle_mode
+        title_label = ctk.CTkLabel(
+            header,
+            text="Advanced Scientific Calculator",
+            font=("Arial", 20, "bold")
         )
-        self.mode_button.pack(side="left", padx=5)
+        title_label.pack(side="left", padx=10)
         
-        self.theme_button = ctk.CTkButton(
-            top_bar,
-            text="Theme",
+        theme_btn = ctk.CTkButton(
+            header,
+            text="🌓 Theme",
             width=100,
             command=self.toggle_theme
         )
-        self.theme_button.pack(side="left", padx=5)
+        theme_btn.pack(side="right", padx=10)
         
-        self.history_button = ctk.CTkButton(
-            top_bar,
-            text="History",
-            width=100,
-            command=self.show_history
-        )
-        self.history_button.pack(side="left", padx=5)
+        # Create tabview
+        self.tabview = ctk.CTkTabview(self, width=880, height=680)
+        self.tabview.pack(fill="both", expand=True, padx=10, pady=5)
         
-        # Display frame
-        display_frame = ctk.CTkFrame(main_frame)
+        # Add tabs
+        self.tabview.add("Calculator")
+        self.tabview.add("Graphing")
+        self.tabview.add("Equation Solver")
+        self.tabview.add("Matrix")
+        self.tabview.add("Conversions")
+        
+        # Setup each tab
+        self.setup_calculator_tab()
+        self.setup_graphing_tab()
+        self.setup_solver_tab()
+        self.setup_matrix_tab()
+        self.setup_conversion_tab()
+        
+    def setup_calculator_tab(self):
+        """Setup the main calculator tab with enhanced UI."""
+        calc_tab = self.tabview.tab("Calculator")
+        
+        # Left side - Display and buttons
+        left_frame = ctk.CTkFrame(calc_tab)
+        left_frame.pack(side="left", fill="both", expand=True, padx=5, pady=5)
+        
+        # Display frame with memory indicator
+        display_frame = ctk.CTkFrame(left_frame)
         display_frame.pack(fill="x", padx=5, pady=5)
         
-        # Memory indicator
-        self.memory_label = ctk.CTkLabel(
-            display_frame,
-            text="",
-            font=("Arial", 12),
-            anchor="w"
-        )
-        self.memory_label.pack(fill="x", padx=5, pady=(5, 0))
+        # Mode and memory indicators
+        indicators_frame = ctk.CTkFrame(display_frame)
+        indicators_frame.pack(fill="x", padx=5, pady=(5, 0))
         
-        # Display
+        self.angle_label = ctk.CTkLabel(
+            indicators_frame,
+            text=f"Angle: {self.angle_mode.upper()}",
+            font=("Arial", 11)
+        )
+        self.angle_label.pack(side="left", padx=5)
+        
+        self.memory_label = ctk.CTkLabel(
+            indicators_frame,
+            text="",
+            font=("Arial", 11)
+        )
+        self.memory_label.pack(side="right", padx=5)
+        
+        # Main display
         self.display = ctk.CTkEntry(
             display_frame,
-            font=("Arial", 28),
-            height=60,
+            font=("Arial", 32, "bold"),
+            height=80,
             justify="right"
         )
         self.display.pack(fill="x", padx=5, pady=5)
         self.display.insert(0, "0")
         
-        # Buttons frame
-        buttons_frame = ctk.CTkFrame(main_frame)
+        # Secondary display for expression
+        self.expr_display = ctk.CTkEntry(
+            display_frame,
+            font=("Arial", 14),
+            height=35,
+            justify="right",
+            fg_color="transparent"
+        )
+        self.expr_display.pack(fill="x", padx=5, pady=(0, 5))
+        
+        # Calculator buttons
+        buttons_frame = ctk.CTkFrame(left_frame)
         buttons_frame.pack(fill="both", expand=True, padx=5, pady=5)
         
-        # Standard calculator buttons
-        self.standard_buttons = [
-            ['MC', 'MR', 'M+', 'M-'],
-            ['C', '⌫', '%', '÷'],
-            ['7', '8', '9', '×'],
-            ['4', '5', '6', '-'],
-            ['1', '2', '3', '+'],
-            ['±', '0', '.', '=']
+        # Enhanced button layout with more functions
+        self.calc_buttons = [
+            ['2nd', 'π', 'e', 'C', '⌫'],
+            ['x²', '√', 'xʸ', '∛', 'log'],
+            ['sin', 'cos', 'tan', 'ln', '('],
+            ['asin', 'acos', 'atan', 'eˣ', ')'],
+            ['7', '8', '9', '÷', 'x!'],
+            ['4', '5', '6', '×', '1/x'],
+            ['1', '2', '3', '-', '%'],
+            ['0', '.', '±', '+', '=']
         ]
         
-        # Scientific calculator buttons
-        self.scientific_buttons = [
-            ['sin', 'cos', 'tan', 'π'],
-            ['log', 'ln', 'e', '√'],
-            ['x²', 'xʸ', '(', ')'],
-            ['1/x', 'n!', 'abs', 'mod']
-        ]
-        
-        self.button_grid_frame = ctk.CTkFrame(buttons_frame)
-        self.button_grid_frame.pack(fill="both", expand=True)
-        
-        self.create_button_grid()
-        
-    def create_button_grid(self):
-        """Create the button grid based on current mode."""
-        # Clear existing buttons
-        for widget in self.button_grid_frame.winfo_children():
-            widget.destroy()
-        
-        buttons = self.standard_buttons
-        if self.scientific_mode:
-            # Add scientific buttons at the top
-            all_buttons = self.scientific_buttons + self.standard_buttons
-            buttons = all_buttons
-        
-        # Create buttons
-        for i, row in enumerate(buttons):
+        for i, row in enumerate(self.calc_buttons):
             for j, btn_text in enumerate(row):
-                self.create_button(i, j, btn_text)
-    
-    def create_button(self, row: int, col: int, text: str):
-        """Create a single button."""
-        # Determine button color based on type
-        if text in ['=']:
-            fg_color = "#1f6aa5"  # Blue for equals
-        elif text in ['C', '⌫']:
-            fg_color = "#c93d3d"  # Red for clear/delete
-        elif text in ['+', '-', '×', '÷', '%', '±']:
-            fg_color = "#5a5a5a"  # Gray for operators
-        elif text in ['MC', 'MR', 'M+', 'M-']:
-            fg_color = "#8b5a8b"  # Purple for memory
-        elif text in self.scientific_buttons[0] + self.scientific_buttons[1] + \
-                     self.scientific_buttons[2] + self.scientific_buttons[3]:
-            fg_color = "#2b7a3d"  # Green for scientific
-        else:
-            fg_color = "#3b3b3b"  # Default dark gray
-        
-        button = ctk.CTkButton(
-            self.button_grid_frame,
-            text=text,
-            font=("Arial", 18, "bold"),
-            height=60,
-            fg_color=fg_color,
-            command=lambda t=text: self.button_click(t)
-        )
-        button.grid(row=row, column=col, padx=3, pady=3, sticky="nsew")
+                self.create_calc_button(buttons_frame, i, j, btn_text)
         
         # Configure grid weights
-        self.button_grid_frame.grid_rowconfigure(row, weight=1)
-        self.button_grid_frame.grid_columnconfigure(col, weight=1)
-    
-    def button_click(self, text: str):
-        """Handle button clicks."""
+        for i in range(8):
+            buttons_frame.grid_rowconfigure(i, weight=1)
+        for j in range(5):
+            buttons_frame.grid_columnconfigure(j, weight=1)
+        
+        # Right side - Quick functions and history
+        right_frame = ctk.CTkFrame(calc_tab, width=250)
+        right_frame.pack(side="right", fill="both", padx=5, pady=5)
+        right_frame.pack_propagate(False)
+        
+        # Quick functions
+        quick_label = ctk.CTkLabel(
+            right_frame,
+            text="Quick Functions",
+            font=("Arial", 14, "bold")
+        )
+        quick_label.pack(pady=5)
+        
+        quick_btns = [
+            ("MC", self.memory_clear),
+            ("MR", self.memory_recall),
+            ("M+", self.memory_add),
+            ("M-", self.memory_subtract),
+            ("DEG/RAD", self.toggle_angle_mode),
+            ("History", self.show_history)
+        ]
+        
+        for text, cmd in quick_btns:
+            btn = ctk.CTkButton(
+                right_frame,
+                text=text,
+                command=cmd,
+                height=35
+            )
+            btn.pack(fill="x", padx=10, pady=2)
+        
+        # History display
+        hist_label = ctk.CTkLabel(
+            right_frame,
+            text="Recent History",
+            font=("Arial", 14, "bold")
+        )
+        hist_label.pack(pady=(15, 5))
+        
+        self.history_text = ctk.CTkTextbox(
+            right_frame,
+            font=("Courier", 11),
+            height=300
+        )
+        self.history_text.pack(fill="both", expand=True, padx=10, pady=5)
+        
+    def setup_graphing_tab(self):
+        """Setup the graphing tab."""
+        graph_tab = self.tabview.tab("Graphing")
+        
+        # Control panel
+        control_frame = ctk.CTkFrame(graph_tab, height=150)
+        control_frame.pack(fill="x", padx=5, pady=5)
+        control_frame.pack_propagate(False)
+        
+        # Function input
+        ctk.CTkLabel(
+            control_frame,
+            text="Enter function f(x):",
+            font=("Arial", 12, "bold")
+        ).grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        
+        self.func_entry = ctk.CTkEntry(
+            control_frame,
+            placeholder_text="e.g., sin(x), x**2, exp(x)",
+            width=400,
+            font=("Arial", 12)
+        )
+        self.func_entry.grid(row=0, column=1, padx=5, pady=5)
+        
+        # Range inputs
+        ctk.CTkLabel(
+            control_frame,
+            text="X Range:",
+            font=("Arial", 12)
+        ).grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        
+        range_frame = ctk.CTkFrame(control_frame)
+        range_frame.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        
+        ctk.CTkLabel(range_frame, text="From:").pack(side="left", padx=2)
+        self.x_min_entry = ctk.CTkEntry(range_frame, width=80)
+        self.x_min_entry.pack(side="left", padx=2)
+        self.x_min_entry.insert(0, "-10")
+        
+        ctk.CTkLabel(range_frame, text="To:").pack(side="left", padx=2)
+        self.x_max_entry = ctk.CTkEntry(range_frame, width=80)
+        self.x_max_entry.pack(side="left", padx=2)
+        self.x_max_entry.insert(0, "10")
+        
+        # Buttons
+        btn_frame = ctk.CTkFrame(control_frame)
+        btn_frame.grid(row=2, column=0, columnspan=2, pady=10)
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="Plot Function",
+            command=self.plot_function,
+            width=120
+        ).pack(side="left", padx=5)
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="Clear Graph",
+            command=self.clear_graph,
+            width=120
+        ).pack(side="left", padx=5)
+        
+        ctk.CTkButton(
+            btn_frame,
+            text="Add Function",
+            command=self.add_function,
+            width=120
+        ).pack(side="left", padx=5)
+        
+        # Graph canvas
+        self.graph_frame = ctk.CTkFrame(graph_tab)
+        self.graph_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        
+        # Create matplotlib figure
+        self.fig = Figure(figsize=(8, 5), dpi=100)
+        self.ax = self.fig.add_subplot(111)
+        self.ax.grid(True, alpha=0.3)
+        self.ax.set_xlabel('x')
+        self.ax.set_ylabel('f(x)')
+        self.ax.set_title('Function Graph')
+        
+        self.canvas = FigureCanvasTkAgg(self.fig, self.graph_frame)
+        self.canvas.draw()
+        self.canvas.get_tk_widget().pack(fill="both", expand=True)
+        
+    def setup_solver_tab(self):
+        """Setup the equation solver tab."""
+        solver_tab = self.tabview.tab("Equation Solver")
+        
+        # Instructions
+        info_label = ctk.CTkLabel(
+            solver_tab,
+            text="Equation Solver - Solve algebraic equations",
+            font=("Arial", 16, "bold")
+        )
+        info_label.pack(pady=10)
+        
+        # Input frame
+        input_frame = ctk.CTkFrame(solver_tab)
+        input_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkLabel(
+            input_frame,
+            text="Enter equation (use x as variable):",
+            font=("Arial", 12, "bold")
+        ).pack(anchor="w", padx=10, pady=5)
+        
+        self.equation_entry = ctk.CTkEntry(
+            input_frame,
+            placeholder_text="e.g., x**2 - 4*x + 4 = 0, 2*x + 5 = 11",
+            font=("Arial", 14),
+            height=40
+        )
+        self.equation_entry.pack(fill="x", padx=10, pady=5)
+        
+        # Solver type
+        type_frame = ctk.CTkFrame(input_frame)
+        type_frame.pack(fill="x", padx=10, pady=5)
+        
+        ctk.CTkLabel(
+            type_frame,
+            text="Equation Type:",
+            font=("Arial", 12)
+        ).pack(side="left", padx=5)
+        
+        self.solver_type = ctk.CTkSegmentedButton(
+            type_frame,
+            values=["Algebraic", "Quadratic", "Polynomial", "Simplify"]
+        )
+        self.solver_type.pack(side="left", padx=10)
+        self.solver_type.set("Algebraic")
+        
+        # Solve button
+        ctk.CTkButton(
+            input_frame,
+            text="Solve Equation",
+            command=self.solve_equation,
+            height=40,
+            font=("Arial", 13, "bold")
+        ).pack(pady=10)
+        
+        # Operations frame
+        ops_frame = ctk.CTkFrame(solver_tab)
+        ops_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkLabel(
+            ops_frame,
+            text="Expression Operations:",
+            font=("Arial", 12, "bold")
+        ).pack(anchor="w", padx=10, pady=5)
+        
+        ops_btn_frame = ctk.CTkFrame(ops_frame)
+        ops_btn_frame.pack(fill="x", padx=10, pady=5)
+        
+        operations = [
+            ("Expand", self.expand_expression),
+            ("Factor", self.factor_expression),
+            ("Differentiate", self.differentiate),
+            ("Integrate", self.integrate_expression)
+        ]
+        
+        for text, cmd in operations:
+            ctk.CTkButton(
+                ops_btn_frame,
+                text=text,
+                command=cmd,
+                width=150
+            ).pack(side="left", padx=5)
+        
+        # Result display
+        ctk.CTkLabel(
+            solver_tab,
+            text="Solution:",
+            font=("Arial", 12, "bold")
+        ).pack(anchor="w", padx=20, pady=(10, 5))
+        
+        self.solver_result = ctk.CTkTextbox(
+            solver_tab,
+            font=("Courier", 13),
+            height=300
+        )
+        self.solver_result.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        
+    def setup_matrix_tab(self):
+        """Setup the matrix operations tab."""
+        matrix_tab = self.tabview.tab("Matrix")
+        
+        ctk.CTkLabel(
+            matrix_tab,
+            text="Matrix Operations",
+            font=("Arial", 16, "bold")
+        ).pack(pady=10)
+        
+        # Matrix input frame
+        input_frame = ctk.CTkFrame(matrix_tab)
+        input_frame.pack(fill="x", padx=20, pady=10)
+        
+        # Matrix A
+        matrix_a_frame = ctk.CTkFrame(input_frame)
+        matrix_a_frame.pack(side="left", fill="both", expand=True, padx=5)
+        
+        ctk.CTkLabel(
+            matrix_a_frame,
+            text="Matrix A (rows separated by ; columns by ,):",
+            font=("Arial", 11, "bold")
+        ).pack(pady=5)
+        
+        self.matrix_a_entry = ctk.CTkTextbox(
+            matrix_a_frame,
+            height=100,
+            font=("Courier", 11)
+        )
+        self.matrix_a_entry.pack(fill="both", expand=True, padx=5, pady=5)
+        self.matrix_a_entry.insert("1.0", "1,2,3;4,5,6;7,8,9")
+        
+        # Matrix B
+        matrix_b_frame = ctk.CTkFrame(input_frame)
+        matrix_b_frame.pack(side="left", fill="both", expand=True, padx=5)
+        
+        ctk.CTkLabel(
+            matrix_b_frame,
+            text="Matrix B:",
+            font=("Arial", 11, "bold")
+        ).pack(pady=5)
+        
+        self.matrix_b_entry = ctk.CTkTextbox(
+            matrix_b_frame,
+            height=100,
+            font=("Courier", 11)
+        )
+        self.matrix_b_entry.pack(fill="both", expand=True, padx=5, pady=5)
+        self.matrix_b_entry.insert("1.0", "9,8,7;6,5,4;3,2,1")
+        
+        # Operations
+        ops_frame = ctk.CTkFrame(matrix_tab)
+        ops_frame.pack(fill="x", padx=20, pady=10)
+        
+        operations = [
+            ("Add (A+B)", lambda: self.matrix_operation("add")),
+            ("Subtract (A-B)", lambda: self.matrix_operation("subtract")),
+            ("Multiply (A×B)", lambda: self.matrix_operation("multiply")),
+            ("Transpose A", lambda: self.matrix_operation("transpose_a")),
+            ("Determinant A", lambda: self.matrix_operation("det_a")),
+            ("Inverse A", lambda: self.matrix_operation("inverse_a"))
+        ]
+        
+        for i, (text, cmd) in enumerate(operations):
+            btn = ctk.CTkButton(
+                ops_frame,
+                text=text,
+                command=cmd,
+                width=140
+            )
+            btn.grid(row=i//3, column=i%3, padx=5, pady=5)
+        
+        # Result
+        ctk.CTkLabel(
+            matrix_tab,
+            text="Result:",
+            font=("Arial", 12, "bold")
+        ).pack(anchor="w", padx=20, pady=(10, 5))
+        
+        self.matrix_result = ctk.CTkTextbox(
+            matrix_tab,
+            font=("Courier", 12),
+            height=200
+        )
+        self.matrix_result.pack(fill="both", expand=True, padx=20, pady=(0, 10))
+        
+    def setup_conversion_tab(self):
+        """Setup the unit conversion tab."""
+        conv_tab = self.tabview.tab("Conversions")
+        
+        ctk.CTkLabel(
+            conv_tab,
+            text="Unit Converter",
+            font=("Arial", 16, "bold")
+        ).pack(pady=10)
+        
+        # Conversion categories
+        categories = {
+            "Length": {
+                "meter": 1,
+                "kilometer": 1000,
+                "centimeter": 0.01,
+                "millimeter": 0.001,
+                "mile": 1609.34,
+                "yard": 0.9144,
+                "foot": 0.3048,
+                "inch": 0.0254
+            },
+            "Weight": {
+                "kilogram": 1,
+                "gram": 0.001,
+                "milligram": 0.000001,
+                "pound": 0.453592,
+                "ounce": 0.0283495,
+                "ton": 1000
+            },
+            "Temperature": {
+                "celsius": "C",
+                "fahrenheit": "F",
+                "kelvin": "K"
+            },
+            "Area": {
+                "sq_meter": 1,
+                "sq_kilometer": 1000000,
+                "sq_mile": 2589988,
+                "sq_yard": 0.836127,
+                "sq_foot": 0.092903,
+                "acre": 4046.86,
+                "hectare": 10000
+            }
+        }
+        
+        self.conversion_data = categories
+        
+        # Category selection
+        cat_frame = ctk.CTkFrame(conv_tab)
+        cat_frame.pack(fill="x", padx=20, pady=10)
+        
+        ctk.CTkLabel(
+            cat_frame,
+            text="Category:",
+            font=("Arial", 12, "bold")
+        ).pack(side="left", padx=10)
+        
+        self.conv_category = ctk.CTkSegmentedButton(
+            cat_frame,
+            values=list(categories.keys()),
+            command=self.update_conversion_units
+        )
+        self.conv_category.pack(side="left", padx=10)
+        self.conv_category.set("Length")
+        
+        # Conversion frame
+        convert_frame = ctk.CTkFrame(conv_tab)
+        convert_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        # From
+        from_frame = ctk.CTkFrame(convert_frame)
+        from_frame.pack(fill="x", pady=10)
+        
+        ctk.CTkLabel(
+            from_frame,
+            text="From:",
+            font=("Arial", 12, "bold")
+        ).pack(side="left", padx=10)
+        
+        self.from_value = ctk.CTkEntry(
+            from_frame,
+            placeholder_text="Enter value",
+            width=150,
+            font=("Arial", 13)
+        )
+        self.from_value.pack(side="left", padx=5)
+        
+        self.from_unit = ctk.CTkComboBox(
+            from_frame,
+            values=list(categories["Length"].keys()),
+            width=150
+        )
+        self.from_unit.pack(side="left", padx=5)
+        
+        # To
+        to_frame = ctk.CTkFrame(convert_frame)
+        to_frame.pack(fill="x", pady=10)
+        
+        ctk.CTkLabel(
+            to_frame,
+            text="To:",
+            font=("Arial", 12, "bold"),
+            width=50
+        ).pack(side="left", padx=10)
+        
+        self.to_value = ctk.CTkEntry(
+            to_frame,
+            width=150,
+            font=("Arial", 13),
+            state="readonly"
+        )
+        self.to_value.pack(side="left", padx=5)
+        
+        self.to_unit = ctk.CTkComboBox(
+            to_frame,
+            values=list(categories["Length"].keys()),
+            width=150
+        )
+        self.to_unit.pack(side="left", padx=5)
+        
+        # Convert button
+        ctk.CTkButton(
+            convert_frame,
+            text="Convert",
+            command=self.perform_conversion,
+            height=40,
+            font=("Arial", 13, "bold")
+        ).pack(pady=20)
+        
+        # Result display
+        self.conversion_result = ctk.CTkLabel(
+            convert_frame,
+            text="",
+            font=("Arial", 14)
+        )
+        self.conversion_result.pack(pady=10)
+        
+    def create_calc_button(self, parent, row: int, col: int, text: str):
+        """Create a calculator button with enhanced styling."""
+        # Determine button color based on type
+        if text == '=':
+            fg_color = "#1f6aa5"
+            hover_color = "#1a5a8f"
+        elif text in ['C', '⌫']:
+            fg_color = "#c93d3d"
+            hover_color = "#b03535"
+        elif text in ['+', '-', '×', '÷', '%']:
+            fg_color = "#6a6a6a"
+            hover_color = "#5a5a5a"
+        elif text in ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'log', 'ln', 'eˣ', 
+                      'x²', '√', 'xʸ', '∛', 'x!', '1/x', '2nd']:
+            fg_color = "#2b7a3d"
+            hover_color = "#246830"
+        elif text in ['π', 'e']:
+            fg_color = "#8b5a8b"
+            hover_color = "#7a4a7a"
+        else:
+            fg_color = "#3b3b3b"
+            hover_color = "#2b2b2b"
+        
+        button = ctk.CTkButton(
+            parent,
+            text=text,
+            font=("Arial", 16, "bold"),
+            fg_color=fg_color,
+            hover_color=hover_color,
+            command=lambda t=text: self.calc_button_click(t)
+        )
+        button.grid(row=row, column=col, padx=2, pady=2, sticky="nsew")
+        
+    def calc_button_click(self, text: str):
+        """Handle calculator button clicks."""
         try:
             if text == 'C':
                 self.clear()
@@ -234,54 +711,59 @@ class Calculator(ctk.CTk):
                 self.backspace()
             elif text == '=':
                 self.calculate()
-            elif text == 'MC':
-                self.memory_clear()
-            elif text == 'MR':
-                self.memory_recall()
-            elif text == 'M+':
-                self.memory_add()
-            elif text == 'M-':
-                self.memory_subtract()
             elif text == '±':
                 self.toggle_sign()
             elif text == '%':
                 self.percentage()
             elif text == '√':
                 self.square_root()
+            elif text == '∛':
+                self.cube_root()
             elif text == 'x²':
                 self.square()
             elif text == 'xʸ':
                 self.append_to_input('**')
             elif text == '1/x':
                 self.reciprocal()
+            elif text == 'x!':
+                self.factorial()
             elif text == 'sin':
                 self.trig_function('sin')
             elif text == 'cos':
                 self.trig_function('cos')
             elif text == 'tan':
                 self.trig_function('tan')
+            elif text == 'asin':
+                self.trig_function('asin')
+            elif text == 'acos':
+                self.trig_function('acos')
+            elif text == 'atan':
+                self.trig_function('atan')
             elif text == 'log':
                 self.log_function('log10')
             elif text == 'ln':
                 self.log_function('log')
+            elif text == 'eˣ':
+                self.exp_function()
             elif text == 'π':
                 self.append_to_input(str(math.pi))
             elif text == 'e':
                 self.append_to_input(str(math.e))
-            elif text == 'n!':
-                self.factorial()
-            elif text == 'abs':
-                self.absolute()
-            elif text == 'mod':
-                self.append_to_input('%')
             elif text in ['(', ')']:
                 self.append_to_input(text)
             elif text == '×':
                 self.append_to_input('*')
             elif text == '÷':
                 self.append_to_input('/')
+            elif text == '2nd':
+                pass  # Toggle secondary functions
             else:
                 self.append_to_input(text)
+                
+            # Update expression display
+            self.expr_display.delete(0, "end")
+            self.expr_display.insert(0, self.current_input)
+                
         except Exception as e:
             self.display_error(str(e))
     
@@ -291,13 +773,6 @@ class Calculator(ctk.CTk):
             self.current_input = ""
             self.result_displayed = False
         
-        # Don't allow multiple decimal points in a number
-        if text == '.':
-            # Get the last number in the expression
-            parts = self.current_input.replace('+', ' ').replace('-', ' ').replace('*', ' ').replace('/', ' ').split()
-            if parts and '.' in parts[-1]:
-                return
-        
         self.current_input += text
         self.update_display(self.current_input)
     
@@ -306,6 +781,7 @@ class Calculator(ctk.CTk):
         self.current_input = ""
         self.result_displayed = False
         self.update_display("0")
+        self.expr_display.delete(0, "end")
     
     def backspace(self):
         """Delete last character."""
@@ -319,28 +795,22 @@ class Calculator(ctk.CTk):
             return
         
         try:
-            # Evaluate the expression safely
-            expression = self.current_input
-            result = safe_eval(expression)
+            result = safe_eval(self.current_input)
             
-            # Format result
             if isinstance(result, float):
                 if result.is_integer():
                     result = int(result)
                 else:
                     result = round(result, 10)
             
-            # Add to history
             self.add_to_history(f"{self.current_input} = {result}")
-            
-            # Update display
             self.current_input = str(result)
             self.update_display(self.current_input)
             self.result_displayed = True
             
         except ZeroDivisionError:
             self.display_error("Division by zero")
-        except (ValueError, TypeError, SyntaxError) as e:
+        except (ValueError, TypeError, SyntaxError):
             self.display_error("Error")
     
     def toggle_sign(self):
@@ -382,6 +852,19 @@ class Calculator(ctk.CTk):
             except (ValueError, TypeError, ZeroDivisionError):
                 self.display_error("Error")
     
+    def cube_root(self):
+        """Calculate cube root."""
+        if self.current_input:
+            try:
+                value = safe_eval(self.current_input)
+                result = value ** (1/3)
+                self.add_to_history(f"∛({self.current_input}) = {result}")
+                self.current_input = str(result)
+                self.update_display(self.current_input)
+                self.result_displayed = True
+            except (ValueError, TypeError, ZeroDivisionError):
+                self.display_error("Error")
+    
     def square(self):
         """Calculate square."""
         if self.current_input:
@@ -411,22 +894,53 @@ class Calculator(ctk.CTk):
             except (ValueError, TypeError, ZeroDivisionError):
                 self.display_error("Error")
     
+    def factorial(self):
+        """Calculate factorial."""
+        if self.current_input:
+            try:
+                value = safe_eval(self.current_input)
+                if value < 0 or not float(value).is_integer():
+                    self.display_error("Invalid input")
+                    return
+                result = math.factorial(int(value))
+                self.add_to_history(f"{self.current_input}! = {result}")
+                self.current_input = str(result)
+                self.update_display(self.current_input)
+                self.result_displayed = True
+            except (ValueError, TypeError, ZeroDivisionError):
+                self.display_error("Error")
+    
     def trig_function(self, func: str):
         """Calculate trigonometric function."""
         if self.current_input:
             try:
                 value = safe_eval(self.current_input)
-                # Convert to radians (assume input is in degrees)
-                radians = math.radians(value)
                 
-                if func == 'sin':
-                    result = math.sin(radians)
-                elif func == 'cos':
-                    result = math.cos(radians)
-                elif func == 'tan':
-                    result = math.tan(radians)
+                if func in ['sin', 'cos', 'tan']:
+                    if self.angle_mode == "deg":
+                        radians = math.radians(value)
+                    else:
+                        radians = value
+                    
+                    if func == 'sin':
+                        result = math.sin(radians)
+                    elif func == 'cos':
+                        result = math.cos(radians)
+                    elif func == 'tan':
+                        result = math.tan(radians)
+                else:  # Inverse trig functions
+                    if func == 'asin':
+                        result = math.asin(value)
+                    elif func == 'acos':
+                        result = math.acos(value)
+                    elif func == 'atan':
+                        result = math.atan(value)
+                    
+                    if self.angle_mode == "deg":
+                        result = math.degrees(result)
                 
-                self.add_to_history(f"{func}({self.current_input}°) = {result}")
+                mode_str = "°" if self.angle_mode == "deg" else "rad"
+                self.add_to_history(f"{func}({self.current_input}{mode_str}) = {result}")
                 self.current_input = str(result)
                 self.update_display(self.current_input)
                 self.result_displayed = True
@@ -456,29 +970,13 @@ class Calculator(ctk.CTk):
             except (ValueError, TypeError, ZeroDivisionError):
                 self.display_error("Error")
     
-    def factorial(self):
-        """Calculate factorial."""
+    def exp_function(self):
+        """Calculate e^x."""
         if self.current_input:
             try:
                 value = safe_eval(self.current_input)
-                if value < 0 or not float(value).is_integer():
-                    self.display_error("Invalid input")
-                    return
-                result = math.factorial(int(value))
-                self.add_to_history(f"{self.current_input}! = {result}")
-                self.current_input = str(result)
-                self.update_display(self.current_input)
-                self.result_displayed = True
-            except (ValueError, TypeError, ZeroDivisionError):
-                self.display_error("Error")
-    
-    def absolute(self):
-        """Calculate absolute value."""
-        if self.current_input:
-            try:
-                value = safe_eval(self.current_input)
-                result = abs(value)
-                self.add_to_history(f"abs({self.current_input}) = {result}")
+                result = math.exp(value)
+                self.add_to_history(f"e^({self.current_input}) = {result}")
                 self.current_input = str(result)
                 self.update_display(self.current_input)
                 self.result_displayed = True
@@ -516,6 +1014,11 @@ class Calculator(ctk.CTk):
             except (ValueError, TypeError, ZeroDivisionError):
                 pass
     
+    def toggle_angle_mode(self):
+        """Toggle between degrees and radians."""
+        self.angle_mode = "rad" if self.angle_mode == "deg" else "deg"
+        self.angle_label.configure(text=f"Angle: {self.angle_mode.upper()}")
+    
     def update_memory_indicator(self):
         """Update memory indicator label."""
         if self.memory != 0:
@@ -538,17 +1041,21 @@ class Calculator(ctk.CTk):
     def add_to_history(self, entry: str):
         """Add calculation to history."""
         self.history.append(entry)
-        if len(self.history) > 50:  # Keep last 50 entries
+        if len(self.history) > 50:
             self.history.pop(0)
+        
+        # Update history display
+        self.history_text.delete("1.0", "end")
+        for item in reversed(self.history[-10:]):  # Show last 10
+            self.history_text.insert("1.0", item + "\n")
     
     def show_history(self):
-        """Show calculation history in a new window."""
+        """Show full calculation history in a new window."""
         history_window = ctk.CTkToplevel(self)
         history_window.title("Calculation History")
-        history_window.geometry("400x500")
+        history_window.geometry("500x600")
         
-        # Create text widget for history
-        history_text = ctk.CTkTextbox(history_window, font=("Arial", 12))
+        history_text = ctk.CTkTextbox(history_window, font=("Courier", 12))
         history_text.pack(fill="both", expand=True, padx=10, pady=10)
         
         if self.history:
@@ -559,31 +1066,17 @@ class Calculator(ctk.CTk):
         
         history_text.configure(state="disabled")
         
-        # Clear history button
-        clear_btn = ctk.CTkButton(
+        ctk.CTkButton(
             history_window,
             text="Clear History",
             command=lambda: self.clear_history(history_window)
-        )
-        clear_btn.pack(pady=5)
+        ).pack(pady=5)
     
     def clear_history(self, window):
         """Clear calculation history."""
         self.history.clear()
+        self.history_text.delete("1.0", "end")
         window.destroy()
-    
-    def toggle_mode(self):
-        """Toggle between standard and scientific mode."""
-        self.scientific_mode = not self.scientific_mode
-        
-        if self.scientific_mode:
-            self.geometry("500x900")
-            self.mode_button.configure(text="Standard")
-        else:
-            self.geometry("500x700")
-            self.mode_button.configure(text="Scientific")
-        
-        self.create_button_grid()
     
     def toggle_theme(self):
         """Toggle between light and dark theme."""
@@ -593,11 +1086,317 @@ class Calculator(ctk.CTk):
         else:
             ctk.set_appearance_mode("dark")
     
+    # Graphing functions
+    def plot_function(self):
+        """Plot the function entered by user."""
+        try:
+            func_str = self.func_entry.get()
+            x_min = float(self.x_min_entry.get())
+            x_max = float(self.x_max_entry.get())
+            
+            if not func_str:
+                return
+            
+            # Create x values
+            x = np.linspace(x_min, x_max, 1000)
+            
+            # Prepare function string for evaluation
+            # Replace common math functions
+            func_str = func_str.replace('^', '**')
+            func_str = func_str.replace('sin', 'np.sin')
+            func_str = func_str.replace('cos', 'np.cos')
+            func_str = func_str.replace('tan', 'np.tan')
+            func_str = func_str.replace('exp', 'np.exp')
+            func_str = func_str.replace('log', 'np.log')
+            func_str = func_str.replace('sqrt', 'np.sqrt')
+            
+            # Evaluate function
+            y = eval(func_str)
+            
+            # Clear and plot
+            self.ax.clear()
+            self.ax.grid(True, alpha=0.3)
+            self.ax.plot(x, y, 'b-', linewidth=2, label=self.func_entry.get())
+            self.ax.axhline(y=0, color='k', linewidth=0.5)
+            self.ax.axvline(x=0, color='k', linewidth=0.5)
+            self.ax.set_xlabel('x', fontsize=11)
+            self.ax.set_ylabel('f(x)', fontsize=11)
+            self.ax.set_title(f'Graph of f(x) = {self.func_entry.get()}', fontsize=12)
+            self.ax.legend()
+            self.canvas.draw()
+            
+        except Exception as e:
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"Error plotting function: {str(e)}")
+    
+    def add_function(self):
+        """Add another function to the existing plot."""
+        try:
+            func_str = self.func_entry.get()
+            x_min = float(self.x_min_entry.get())
+            x_max = float(self.x_max_entry.get())
+            
+            if not func_str:
+                return
+            
+            x = np.linspace(x_min, x_max, 1000)
+            
+            func_str = func_str.replace('^', '**')
+            func_str = func_str.replace('sin', 'np.sin')
+            func_str = func_str.replace('cos', 'np.cos')
+            func_str = func_str.replace('tan', 'np.tan')
+            func_str = func_str.replace('exp', 'np.exp')
+            func_str = func_str.replace('log', 'np.log')
+            func_str = func_str.replace('sqrt', 'np.sqrt')
+            
+            y = eval(func_str)
+            
+            # Add to existing plot
+            self.ax.plot(x, y, linewidth=2, label=self.func_entry.get())
+            self.ax.legend()
+            self.canvas.draw()
+            
+        except Exception as e:
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"Error adding function: {str(e)}")
+    
+    def clear_graph(self):
+        """Clear the graph."""
+        self.ax.clear()
+        self.ax.grid(True, alpha=0.3)
+        self.ax.set_xlabel('x')
+        self.ax.set_ylabel('f(x)')
+        self.ax.set_title('Function Graph')
+        self.canvas.draw()
+    
+    # Equation solver functions
+    def solve_equation(self):
+        """Solve the equation entered by user."""
+        try:
+            equation_str = self.equation_entry.get()
+            if not equation_str:
+                return
+            
+            x = symbols('x')
+            
+            # Parse equation
+            if '=' in equation_str:
+                left, right = equation_str.split('=')
+                equation = sp.sympify(left) - sp.sympify(right)
+            else:
+                equation = sp.sympify(equation_str)
+            
+            solver_type = self.solver_type.get()
+            
+            if solver_type == "Algebraic":
+                solutions = solve(equation, x)
+            elif solver_type == "Quadratic":
+                solutions = solve(equation, x)
+            elif solver_type == "Polynomial":
+                solutions = solve(equation, x)
+            elif solver_type == "Simplify":
+                solutions = simplify(equation)
+            
+            # Display result
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"Equation: {equation_str}\n\n")
+            
+            if solver_type == "Simplify":
+                self.solver_result.insert("end", f"Simplified: {solutions}\n")
+            else:
+                self.solver_result.insert("end", f"Solution(s):\n")
+                if isinstance(solutions, list):
+                    for i, sol in enumerate(solutions, 1):
+                        self.solver_result.insert("end", f"  x{i} = {sol}\n")
+                else:
+                    self.solver_result.insert("end", f"  x = {solutions}\n")
+            
+        except Exception as e:
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"Error solving equation: {str(e)}\n\n")
+            self.solver_result.insert("end", "Make sure your equation is properly formatted.\n")
+            self.solver_result.insert("end", "Example: x**2 - 4*x + 4 = 0")
+    
+    def expand_expression(self):
+        """Expand the expression."""
+        try:
+            expr_str = self.equation_entry.get().split('=')[0]
+            x = symbols('x')
+            expr = sp.sympify(expr_str)
+            result = expand(expr)
+            
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"Original: {expr_str}\n\n")
+            self.solver_result.insert("end", f"Expanded: {result}")
+        except Exception as e:
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"Error: {str(e)}")
+    
+    def factor_expression(self):
+        """Factor the expression."""
+        try:
+            expr_str = self.equation_entry.get().split('=')[0]
+            x = symbols('x')
+            expr = sp.sympify(expr_str)
+            result = factor(expr)
+            
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"Original: {expr_str}\n\n")
+            self.solver_result.insert("end", f"Factored: {result}")
+        except Exception as e:
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"Error: {str(e)}")
+    
+    def differentiate(self):
+        """Differentiate the expression."""
+        try:
+            expr_str = self.equation_entry.get().split('=')[0]
+            x = symbols('x')
+            expr = sp.sympify(expr_str)
+            result = diff(expr, x)
+            
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"f(x) = {expr_str}\n\n")
+            self.solver_result.insert("end", f"f'(x) = {result}")
+        except Exception as e:
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"Error: {str(e)}")
+    
+    def integrate_expression(self):
+        """Integrate the expression."""
+        try:
+            expr_str = self.equation_entry.get().split('=')[0]
+            x = symbols('x')
+            expr = sp.sympify(expr_str)
+            result = integrate(expr, x)
+            
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"f(x) = {expr_str}\n\n")
+            self.solver_result.insert("end", f"∫f(x)dx = {result} + C")
+        except Exception as e:
+            self.solver_result.delete("1.0", "end")
+            self.solver_result.insert("1.0", f"Error: {str(e)}")
+    
+    # Matrix operations
+    def parse_matrix(self, matrix_str: str) -> np.ndarray:
+        """Parse matrix from string."""
+        rows = matrix_str.strip().split(';')
+        matrix = []
+        for row in rows:
+            cols = [float(x.strip()) for x in row.split(',')]
+            matrix.append(cols)
+        return np.array(matrix)
+    
+    def matrix_operation(self, operation: str):
+        """Perform matrix operation."""
+        try:
+            self.matrix_result.delete("1.0", "end")
+            
+            matrix_a_str = self.matrix_a_entry.get("1.0", "end").strip()
+            matrix_a = self.parse_matrix(matrix_a_str)
+            
+            if operation == "add":
+                matrix_b_str = self.matrix_b_entry.get("1.0", "end").strip()
+                matrix_b = self.parse_matrix(matrix_b_str)
+                result = matrix_a + matrix_b
+                self.matrix_result.insert("1.0", f"A + B =\n{result}")
+                
+            elif operation == "subtract":
+                matrix_b_str = self.matrix_b_entry.get("1.0", "end").strip()
+                matrix_b = self.parse_matrix(matrix_b_str)
+                result = matrix_a - matrix_b
+                self.matrix_result.insert("1.0", f"A - B =\n{result}")
+                
+            elif operation == "multiply":
+                matrix_b_str = self.matrix_b_entry.get("1.0", "end").strip()
+                matrix_b = self.parse_matrix(matrix_b_str)
+                result = np.matmul(matrix_a, matrix_b)
+                self.matrix_result.insert("1.0", f"A × B =\n{result}")
+                
+            elif operation == "transpose_a":
+                result = matrix_a.T
+                self.matrix_result.insert("1.0", f"Transpose of A =\n{result}")
+                
+            elif operation == "det_a":
+                det = np.linalg.det(matrix_a)
+                self.matrix_result.insert("1.0", f"Determinant of A = {det}")
+                
+            elif operation == "inverse_a":
+                inv = np.linalg.inv(matrix_a)
+                self.matrix_result.insert("1.0", f"Inverse of A =\n{inv}")
+                
+        except Exception as e:
+            self.matrix_result.delete("1.0", "end")
+            self.matrix_result.insert("1.0", f"Error: {str(e)}\n\n")
+            self.matrix_result.insert("end", "Make sure matrices are properly formatted.\n")
+            self.matrix_result.insert("end", "Example: 1,2,3;4,5,6;7,8,9")
+    
+    # Conversion functions
+    def update_conversion_units(self, category: str):
+        """Update unit dropdowns based on selected category."""
+        units = list(self.conversion_data[category].keys())
+        self.from_unit.configure(values=units)
+        self.to_unit.configure(values=units)
+        self.from_unit.set(units[0])
+        self.to_unit.set(units[1] if len(units) > 1 else units[0])
+    
+    def perform_conversion(self):
+        """Perform unit conversion."""
+        try:
+            value = float(self.from_value.get())
+            category = self.conv_category.get()
+            from_unit = self.from_unit.get()
+            to_unit = self.to_unit.get()
+            
+            if category == "Temperature":
+                result = self.convert_temperature(value, from_unit, to_unit)
+            else:
+                # Get conversion factors
+                from_factor = self.conversion_data[category][from_unit]
+                to_factor = self.conversion_data[category][to_unit]
+                
+                # Convert to base unit then to target unit
+                base_value = value * from_factor
+                result = base_value / to_factor
+            
+            self.to_value.configure(state="normal")
+            self.to_value.delete(0, "end")
+            self.to_value.insert(0, f"{result:.6f}")
+            self.to_value.configure(state="readonly")
+            
+            self.conversion_result.configure(
+                text=f"{value} {from_unit} = {result:.6f} {to_unit}"
+            )
+            
+        except Exception as e:
+            self.conversion_result.configure(text=f"Error: {str(e)}")
+    
+    def convert_temperature(self, value: float, from_unit: str, to_unit: str) -> float:
+        """Convert temperature between units."""
+        # Convert to Celsius first
+        if from_unit == "celsius":
+            celsius = value
+        elif from_unit == "fahrenheit":
+            celsius = (value - 32) * 5/9
+        elif from_unit == "kelvin":
+            celsius = value - 273.15
+        
+        # Convert from Celsius to target
+        if to_unit == "celsius":
+            return celsius
+        elif to_unit == "fahrenheit":
+            return celsius * 9/5 + 32
+        elif to_unit == "kelvin":
+            return celsius + 273.15
+    
     def handle_keypress(self, event):
         """Handle keyboard input."""
+        # Only handle keyboard in calculator tab
+        if self.tabview.get() != "Calculator":
+            return
+        
         key = event.char
         
-        # Number and operator keys
         if key in '0123456789.+-*/()':
             if key == '*':
                 self.append_to_input('*')
@@ -617,7 +1416,7 @@ class Calculator(ctk.CTk):
 
 def main():
     """Main entry point."""
-    app = Calculator()
+    app = AdvancedCalculator()
     app.mainloop()
 
 
