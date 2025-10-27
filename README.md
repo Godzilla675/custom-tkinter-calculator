@@ -53,6 +53,9 @@ pip install -r requirements.txt
 3. Run the calculator:
 ```bash
 python calculator.py
+# or
+python demo.py  # For a demo with feature descriptions
+```
 ```
 
 ## Usage
@@ -148,8 +151,10 @@ All 32 tests pass successfully! ✅
 ```
 custom-tkinter-calculator/
 ├── calculator.py          # Main calculator application
+├── demo.py               # Demo script with feature showcase
 ├── test_calculator.py     # Comprehensive test suite
 ├── requirements.txt       # Python dependencies
+├── .gitignore            # Git ignore configuration
 └── README.md             # This file
 ```
 
@@ -160,12 +165,17 @@ custom-tkinter-calculator/
 - **CustomTkinter 5.2.2**: Modern UI framework
 - **tkinter**: Base GUI framework (included with Python)
 - **math**: Mathematical operations
+- **ast**: Safe expression parsing (security)
 
 ### Key Classes
 - `Calculator`: Main application class inheriting from `ctk.CTk`
   - Handles all UI creation and event management
   - Manages calculator state and operations
   - Implements keyboard and button event handlers
+- `safe_eval()`: Secure expression evaluation function
+  - Uses AST parsing instead of eval()
+  - Prevents code injection attacks
+  - Validates all mathematical operations
 
 ### Architecture Highlights
 - Clean separation of UI and logic
@@ -173,6 +183,29 @@ custom-tkinter-calculator/
 - Event-driven architecture
 - Modular button creation system
 - Dynamic mode switching (Standard/Scientific)
+- **Security-first design** with safe expression evaluation
+
+## Security
+
+This calculator implements security best practices to prevent code injection and malicious code execution:
+
+### Safe Expression Evaluation
+- **Custom `safe_eval()` function**: All user input is parsed using Python's Abstract Syntax Tree (AST)
+- **No `eval()` vulnerabilities**: Replaces all unsafe `eval()` calls with secure AST-based parsing
+- **Whitelist approach**: Only allows specific mathematical operations (add, subtract, multiply, divide, power, modulo)
+- **Input validation**: Rejects any non-mathematical expressions
+
+### Security Testing
+- ✅ CodeQL security scan: **0 alerts**
+- ✅ Malicious code injection attempts are blocked
+- ✅ All user input is validated before execution
+
+Example of blocked malicious input:
+```python
+# This will be safely rejected:
+__import__('os').system('malicious_command')
+# Result: ValueError - Unsupported expression
+```
 
 ## Features in Detail
 
