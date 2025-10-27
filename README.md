@@ -36,13 +36,14 @@ A professional-grade scientific calculator with graphing capabilities, equation 
 
 ### Equation Solver Tab
 - **Solve Equations**: Algebraic, Quadratic, and Polynomial equations
+- **Multi-Variable Support**: Automatically detects and solves for x, y, z, and other variables
 - **Expression Operations**:
-  - **Expand**: Expand algebraic expressions
-  - **Factor**: Factor polynomials
-  - **Differentiate**: Calculate derivatives
-  - **Integrate**: Calculate integrals (indefinite)
+  - **Expand**: Expand algebraic expressions (supports multiple variables)
+  - **Factor**: Factor polynomials (supports multiple variables)
+  - **Differentiate**: Calculate derivatives (partial derivatives for multi-variable expressions)
+  - **Integrate**: Calculate integrals (indefinite, supports multiple variables)
 - **Simplify**: Simplify complex expressions
-- **Step-by-step Solutions**: Clear display of solutions
+- **Step-by-step Solutions**: Clear display of solutions for each variable
 
 ### Matrix Operations Tab
 - **Matrix Arithmetic**: Addition, Subtraction, Multiplication
@@ -118,10 +119,14 @@ python calculator.py
 
 ### Solving Equations
 1. Go to "Equation Solver" tab
-2. Enter equation (e.g., `x**2 - 4*x + 4 = 0`)
+2. Enter equation with one or more variables (e.g., `x**2 - 4*x + 4 = 0`, `x + 2*y = 10`, `x + y + z = 15`)
 3. Select equation type
 4. Click "Solve Equation"
+   - For single-variable equations: shows solutions for that variable
+   - For multi-variable equations: shows solutions for each variable in terms of others
 5. Use operation buttons for expand, factor, differentiate, or integrate
+   - Differentiate: shows partial derivatives for multi-variable expressions
+   - Integrate: shows integrals for each variable separately
 
 ### Matrix Operations
 1. Go to "Matrix" tab
@@ -149,40 +154,49 @@ python calculator.py
 
 ## 🧪 Testing
 
-The calculator includes a comprehensive test suite with 30+ tests covering all features.
+The calculator includes a comprehensive test suite with 46+ tests covering all features.
 
 ### Run Tests
 
 ```bash
-# With virtual display (for headless environments)
+# Run all tests (with virtual display for headless environments)
 xvfb-run -a python test_enhanced_calculator.py
+xvfb-run -a python test_new_features.py
 
 # Direct run (if you have a display)
 python test_enhanced_calculator.py
+python test_new_features.py
+
+# Run comprehensive manual test
+python manual_test.py
 ```
 
 ### Test Coverage
-✅ Safe expression evaluation (security)
+✅ Safe expression evaluation (security)  
 ✅ Basic arithmetic operations  
 ✅ Scientific functions (trig, log, exp)  
 ✅ Angle mode (degrees/radians)  
 ✅ Memory operations  
 ✅ Matrix operations (all types)  
 ✅ Unit conversions  
-✅ Graphing functionality  
-✅ Equation solver  
+✅ Graphing functionality (fixed - safe evaluation, no eval())  
+✅ Multi-variable equation solver (x, y, z, etc.)  
 ✅ Expression operations (expand, factor, differentiate, integrate)  
+✅ Partial derivatives for multi-variable expressions  
+✅ Multi-variable integration  
 ✅ UI components and tab switching  
 ✅ Error handling  
 
-**All 30 tests passing! ✅**
+**All 46 tests passing! ✅** (30 original + 16 new feature tests)
 
 ## 📁 Project Structure
 
 ```
 custom-tkinter-calculator/
 ├── calculator.py              # Main enhanced calculator application (1400+ lines)
-├── test_enhanced_calculator.py # Comprehensive test suite (30 tests)
+├── test_enhanced_calculator.py # Original test suite (30 tests)
+├── test_new_features.py       # New feature tests (16 tests)
+├── manual_test.py             # Comprehensive manual testing script
 ├── demo.py                    # Demo script
 ├── requirements.txt           # Python dependencies
 ├── .gitignore                 # Git ignore configuration
@@ -207,9 +221,10 @@ custom-tkinter-calculator/
 - **Professional UI**: Color-coded buttons, dual displays, indicators
 
 ### Security
-- ✅ **No eval() vulnerabilities**: All user input parsed with AST
+- ✅ **No eval() vulnerabilities**: Calculator uses AST parsing, graphing uses SymPy lambdify
 - ✅ **Input validation**: Expressions validated before execution
 - ✅ **Whitelist approach**: Only mathematical operations allowed
+- ✅ **Safe graphing**: Uses SymPy symbolic evaluation instead of unsafe eval()
 - ✅ **CodeQL verified**: 0 security alerts
 - ✅ **Exception handling**: Specific exception types throughout
 
@@ -222,10 +237,15 @@ __import__('os').system('malicious_command')
 ## 📊 Performance
 
 - **Lines of Code**: 1,400+ (main application)
-- **Test Suite**: 30 comprehensive tests
+- **Test Suite**: 46 comprehensive tests (30 original + 16 new)
 - **Test Pass Rate**: 100%
-- **Security Rating**: A+ (0 CodeQL alerts)
+- **Security Rating**: A+ (0 CodeQL alerts, safe evaluation throughout)
 - **Features**: 40+ distinct capabilities
+- **Recent Improvements**:
+  - Fixed graphing to use safe SymPy evaluation (no eval())
+  - Added multi-variable equation solving (x, y, z, etc.)
+  - Enhanced differentiation for partial derivatives
+  - Enhanced integration for multiple variables
 
 ## 🎯 Use Cases
 
