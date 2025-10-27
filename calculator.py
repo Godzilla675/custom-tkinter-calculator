@@ -267,7 +267,7 @@ class AdvancedCalculator(ctk.CTk):
         graph_tab = self.tabview.tab("Graphing")
         
         # Control panel
-        control_frame = ctk.CTkFrame(graph_tab, height=150)
+        control_frame = ctk.CTkFrame(graph_tab, height=180)
         control_frame.pack(fill="x", padx=5, pady=5)
         control_frame.pack_propagate(False)
         
@@ -330,6 +330,15 @@ class AdvancedCalculator(ctk.CTk):
             command=self.add_function,
             width=120
         ).pack(side="left", padx=5)
+        
+        # Error/Status label
+        self.graph_error_label = ctk.CTkLabel(
+            control_frame,
+            text="",
+            font=("Arial", 11),
+            text_color="red"
+        )
+        self.graph_error_label.grid(row=3, column=0, columnspan=2, padx=5, pady=5)
         
         # Graph canvas
         self.graph_frame = ctk.CTkFrame(graph_tab)
@@ -1098,25 +1107,25 @@ class AdvancedCalculator(ctk.CTk):
                 return
             
             # Create x values
-            x = np.linspace(x_min, x_max, 1000)
+            x_vals = np.linspace(x_min, x_max, 1000)
             
-            # Prepare function string for evaluation
-            # Replace common math functions
-            func_str = func_str.replace('^', '**')
-            func_str = func_str.replace('sin', 'np.sin')
-            func_str = func_str.replace('cos', 'np.cos')
-            func_str = func_str.replace('tan', 'np.tan')
-            func_str = func_str.replace('exp', 'np.exp')
-            func_str = func_str.replace('log', 'np.log')
-            func_str = func_str.replace('sqrt', 'np.sqrt')
+            # Use sympy to evaluate the function safely
+            x = sp.Symbol('x')
+            
+            # Parse the function with sympy
+            func_str_clean = func_str.replace('^', '**')
+            expr = sp.sympify(func_str_clean)
+            
+            # Convert to numpy function for vectorized evaluation
+            func = sp.lambdify(x, expr, modules=['numpy'])
             
             # Evaluate function
-            y = eval(func_str)
+            y_vals = func(x_vals)
             
             # Clear and plot
             self.ax.clear()
             self.ax.grid(True, alpha=0.3)
-            self.ax.plot(x, y, 'b-', linewidth=2, label=self.func_entry.get())
+            self.ax.plot(x_vals, y_vals, 'b-', linewidth=2, label=self.func_entry.get())
             self.ax.axhline(y=0, color='k', linewidth=0.5)
             self.ax.axvline(x=0, color='k', linewidth=0.5)
             self.ax.set_xlabel('x', fontsize=11)
@@ -1125,9 +1134,12 @@ class AdvancedCalculator(ctk.CTk):
             self.ax.legend()
             self.canvas.draw()
             
+            # Clear any previous error
+            self.graph_error_label.configure(text="")
+            
         except Exception as e:
-            self.solver_result.delete("1.0", "end")
-            self.solver_result.insert("1.0", f"Error plotting function: {str(e)}")
+            # Display error in the error label
+            self.graph_error_label.configure(text=f"Error: {str(e)}")
     
     def add_function(self):
         """Add another function to the existing plot."""
@@ -1139,26 +1151,32 @@ class AdvancedCalculator(ctk.CTk):
             if not func_str:
                 return
             
-            x = np.linspace(x_min, x_max, 1000)
+            # Create x values
+            x_vals = np.linspace(x_min, x_max, 1000)
             
-            func_str = func_str.replace('^', '**')
-            func_str = func_str.replace('sin', 'np.sin')
-            func_str = func_str.replace('cos', 'np.cos')
-            func_str = func_str.replace('tan', 'np.tan')
-            func_str = func_str.replace('exp', 'np.exp')
-            func_str = func_str.replace('log', 'np.log')
-            func_str = func_str.replace('sqrt', 'np.sqrt')
+            # Use sympy to evaluate the function safely
+            x = sp.Symbol('x')
             
-            y = eval(func_str)
+            # Parse the function with sympy
+            func_str_clean = func_str.replace('^', '**')
+            expr = sp.sympify(func_str_clean)
+            
+            # Convert to numpy function for vectorized evaluation
+            func = sp.lambdify(x, expr, modules=['numpy'])
+            
+            # Evaluate function
+            y_vals = func(x_vals)
             
             # Add to existing plot
-            self.ax.plot(x, y, linewidth=2, label=self.func_entry.get())
+            self.ax.plot(x_vals, y_vals, linewidth=2, label=self.func_entry.get())
             self.ax.legend()
             self.canvas.draw()
             
+            # Clear any previous error
+            self.graph_error_label.configure(text="")
+            
         except Exception as e:
-            self.solver_result.delete("1.0", "end")
-            self.solver_result.insert("1.0", f"Error adding function: {str(e)}")
+            self.graph_error_label.configure(text=f"Error: {str(e)}")
     
     def clear_graph(self):
         """Clear the graph."""
@@ -1177,8 +1195,6 @@ class AdvancedCalculator(ctk.CTk):
             if not equation_str:
                 return
             
-            x = symbols('x')
-            
             # Parse equation
             if '=' in equation_str:
                 left, right = equation_str.split('=')
@@ -1186,42 +1202,76 @@ class AdvancedCalculator(ctk.CTk):
             else:
                 equation = sp.sympify(equation_str)
             
-            solver_type = self.solver_type.get()
-            
-            if solver_type == "Algebraic":
-                solutions = solve(equation, x)
-            elif solver_type == "Quadratic":
-                solutions = solve(equation, x)
-            elif solver_type == "Polynomial":
-                solutions = solve(equation, x)
-            elif solver_type == "Simplify":
-                solutions = simplify(equation)
+            # Detect all variables in the equation
+            variables = list(equation.free_symbols)
             
             # Display result
             self.solver_result.delete("1.0", "end")
             self.solver_result.insert("1.0", f"Equation: {equation_str}\n\n")
             
-            if solver_type == "Simplify":
-                self.solver_result.insert("end", f"Simplified: {solutions}\n")
-            else:
-                self.solver_result.insert("end", f"Solution(s):\n")
-                if isinstance(solutions, list):
-                    for i, sol in enumerate(solutions, 1):
-                        self.solver_result.insert("end", f"  x{i} = {sol}\n")
+            if len(variables) == 0:
+                self.solver_result.insert("end", "No variables found in equation.\n")
+                return
+            
+            # Sort variables by name for consistent display
+            variables = sorted(variables, key=lambda s: str(s))
+            
+            solver_type = self.solver_type.get()
+            
+            if len(variables) == 1:
+                # Single variable equation
+                var = variables[0]
+                self.solver_result.insert("end", f"Solving for {var}:\n\n")
+                
+                if solver_type == "Simplify":
+                    solutions = simplify(equation)
+                    self.solver_result.insert("end", f"Simplified: {solutions}\n")
                 else:
-                    self.solver_result.insert("end", f"  x = {solutions}\n")
+                    solutions = solve(equation, var)
+                    self.solver_result.insert("end", f"Solution(s):\n")
+                    if isinstance(solutions, list):
+                        if len(solutions) == 0:
+                            self.solver_result.insert("end", "  No solutions found\n")
+                        else:
+                            for i, sol in enumerate(solutions, 1):
+                                self.solver_result.insert("end", f"  {var}{i} = {sol}\n")
+                    else:
+                        self.solver_result.insert("end", f"  {var} = {solutions}\n")
+            else:
+                # Multiple variables - solve for each variable
+                self.solver_result.insert("end", f"Variables detected: {', '.join(str(v) for v in variables)}\n\n")
+                
+                if solver_type == "Simplify":
+                    solutions = simplify(equation)
+                    self.solver_result.insert("end", f"Simplified: {solutions}\n")
+                else:
+                    # Try to solve for each variable in terms of others
+                    for var in variables:
+                        try:
+                            solutions = solve(equation, var)
+                            self.solver_result.insert("end", f"Solving for {var}:\n")
+                            if isinstance(solutions, list):
+                                if len(solutions) == 0:
+                                    self.solver_result.insert("end", "  No solutions found\n")
+                                else:
+                                    for i, sol in enumerate(solutions, 1):
+                                        self.solver_result.insert("end", f"  {var} = {sol}\n")
+                            else:
+                                self.solver_result.insert("end", f"  {var} = {solutions}\n")
+                            self.solver_result.insert("end", "\n")
+                        except Exception as e:
+                            self.solver_result.insert("end", f"  Cannot solve for {var}: {str(e)}\n\n")
             
         except Exception as e:
             self.solver_result.delete("1.0", "end")
             self.solver_result.insert("1.0", f"Error solving equation: {str(e)}\n\n")
             self.solver_result.insert("end", "Make sure your equation is properly formatted.\n")
-            self.solver_result.insert("end", "Example: x**2 - 4*x + 4 = 0")
+            self.solver_result.insert("end", "Example: x**2 - 4*x + 4 = 0 or x + 2*y = 10")
     
     def expand_expression(self):
         """Expand the expression."""
         try:
             expr_str = self.equation_entry.get().split('=')[0]
-            x = symbols('x')
             expr = sp.sympify(expr_str)
             result = expand(expr)
             
@@ -1236,7 +1286,6 @@ class AdvancedCalculator(ctk.CTk):
         """Factor the expression."""
         try:
             expr_str = self.equation_entry.get().split('=')[0]
-            x = symbols('x')
             expr = sp.sympify(expr_str)
             result = factor(expr)
             
@@ -1251,13 +1300,33 @@ class AdvancedCalculator(ctk.CTk):
         """Differentiate the expression."""
         try:
             expr_str = self.equation_entry.get().split('=')[0]
-            x = symbols('x')
             expr = sp.sympify(expr_str)
-            result = diff(expr, x)
+            
+            # Detect all variables
+            variables = list(expr.free_symbols)
+            
+            if len(variables) == 0:
+                self.solver_result.delete("1.0", "end")
+                self.solver_result.insert("1.0", "No variables found in expression.")
+                return
+            
+            # Sort variables by name for consistent display
+            variables = sorted(variables, key=lambda s: str(s))
             
             self.solver_result.delete("1.0", "end")
-            self.solver_result.insert("1.0", f"f(x) = {expr_str}\n\n")
-            self.solver_result.insert("end", f"f'(x) = {result}")
+            self.solver_result.insert("1.0", f"f({', '.join(str(v) for v in variables)}) = {expr_str}\n\n")
+            
+            # Differentiate with respect to each variable
+            if len(variables) == 1:
+                var = variables[0]
+                result = diff(expr, var)
+                self.solver_result.insert("end", f"f'({var}) = {result}")
+            else:
+                self.solver_result.insert("end", "Partial derivatives:\n\n")
+                for var in variables:
+                    result = diff(expr, var)
+                    self.solver_result.insert("end", f"∂f/∂{var} = {result}\n")
+                    
         except Exception as e:
             self.solver_result.delete("1.0", "end")
             self.solver_result.insert("1.0", f"Error: {str(e)}")
@@ -1266,13 +1335,33 @@ class AdvancedCalculator(ctk.CTk):
         """Integrate the expression."""
         try:
             expr_str = self.equation_entry.get().split('=')[0]
-            x = symbols('x')
             expr = sp.sympify(expr_str)
-            result = integrate(expr, x)
+            
+            # Detect all variables
+            variables = list(expr.free_symbols)
+            
+            if len(variables) == 0:
+                self.solver_result.delete("1.0", "end")
+                self.solver_result.insert("1.0", "No variables found in expression.")
+                return
+            
+            # Sort variables by name for consistent display
+            variables = sorted(variables, key=lambda s: str(s))
             
             self.solver_result.delete("1.0", "end")
-            self.solver_result.insert("1.0", f"f(x) = {expr_str}\n\n")
-            self.solver_result.insert("end", f"∫f(x)dx = {result} + C")
+            self.solver_result.insert("1.0", f"f({', '.join(str(v) for v in variables)}) = {expr_str}\n\n")
+            
+            # Integrate with respect to each variable
+            if len(variables) == 1:
+                var = variables[0]
+                result = integrate(expr, var)
+                self.solver_result.insert("end", f"∫f({var})d{var} = {result} + C")
+            else:
+                self.solver_result.insert("end", "Integrals with respect to each variable:\n\n")
+                for var in variables:
+                    result = integrate(expr, var)
+                    self.solver_result.insert("end", f"∫f(...)d{var} = {result} + C\n")
+                    
         except Exception as e:
             self.solver_result.delete("1.0", "end")
             self.solver_result.insert("1.0", f"Error: {str(e)}")
