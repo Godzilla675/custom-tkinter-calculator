@@ -11,8 +11,6 @@ def preprocess_math_input(expression: str) -> str:
     """
     Preprocess mathematical expressions to make them more user-friendly.
     """
-    import re
-    
     # First, replace ^ with **
     expr = expression.replace('^', '**')
     
