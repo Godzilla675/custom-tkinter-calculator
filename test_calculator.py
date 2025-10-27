@@ -26,7 +26,7 @@ class TestCalculator(unittest.TestCase):
         """Clean up after tests."""
         try:
             self.calc.destroy()
-        except:
+        except Exception:
             pass
     
     def test_basic_addition(self):
@@ -261,7 +261,7 @@ class TestCalculatorUI(unittest.TestCase):
         """Clean up after tests."""
         try:
             self.calc.destroy()
-        except:
+        except Exception:
             pass
     
     def test_mode_toggle(self):

@@ -13,7 +13,56 @@ Features:
 
 import customtkinter as ctk
 import math
+import ast
+import operator
 from typing import List, Optional
+
+
+def safe_eval(expression: str) -> float:
+    """
+    Safely evaluate a mathematical expression without using eval().
+    Only allows mathematical operations and prevents code injection.
+    """
+    # Define allowed operations
+    allowed_operators = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Pow: operator.pow,
+        ast.Mod: operator.mod,
+        ast.USub: operator.neg,
+    }
+    
+    def eval_node(node):
+        """Recursively evaluate AST nodes."""
+        if isinstance(node, ast.Constant):  # Python 3.8+
+            return node.value
+        elif isinstance(node, ast.Num):  # Fallback for older Python
+            return node.n
+        elif isinstance(node, ast.BinOp):
+            left = eval_node(node.left)
+            right = eval_node(node.right)
+            op = allowed_operators.get(type(node.op))
+            if op is None:
+                raise ValueError(f"Unsupported operator: {type(node.op).__name__}")
+            return op(left, right)
+        elif isinstance(node, ast.UnaryOp):
+            operand = eval_node(node.operand)
+            op = allowed_operators.get(type(node.op))
+            if op is None:
+                raise ValueError(f"Unsupported unary operator: {type(node.op).__name__}")
+            return op(operand)
+        else:
+            raise ValueError(f"Unsupported expression: {type(node).__name__}")
+    
+    try:
+        # Parse the expression
+        tree = ast.parse(expression, mode='eval')
+        # Evaluate it safely
+        return eval_node(tree.body)
+    except (SyntaxError, ValueError, TypeError) as e:
+        raise ValueError(f"Invalid expression: {str(e)}")
 
 
 class Calculator(ctk.CTk):
@@ -270,14 +319,9 @@ class Calculator(ctk.CTk):
             return
         
         try:
-            # Replace visual operators with Python operators
+            # Evaluate the expression safely
             expression = self.current_input
-            
-            # Add support for implicit multiplication (e.g., 2π -> 2*π)
-            # This is a simplified version
-            
-            # Evaluate the expression
-            result = eval(expression)
+            result = safe_eval(expression)
             
             # Format result
             if isinstance(result, float):
@@ -296,37 +340,37 @@ class Calculator(ctk.CTk):
             
         except ZeroDivisionError:
             self.display_error("Division by zero")
-        except Exception as e:
+        except (ValueError, TypeError, SyntaxError) as e:
             self.display_error("Error")
     
     def toggle_sign(self):
         """Toggle the sign of the current number."""
         if self.current_input:
             try:
-                value = eval(self.current_input)
+                value = safe_eval(self.current_input)
                 self.current_input = str(-value)
                 self.update_display(self.current_input)
                 self.result_displayed = True
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 pass
     
     def percentage(self):
         """Calculate percentage."""
         if self.current_input:
             try:
-                value = eval(self.current_input)
+                value = safe_eval(self.current_input)
                 result = value / 100
                 self.current_input = str(result)
                 self.update_display(self.current_input)
                 self.result_displayed = True
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 self.display_error("Error")
     
     def square_root(self):
         """Calculate square root."""
         if self.current_input:
             try:
-                value = eval(self.current_input)
+                value = safe_eval(self.current_input)
                 if value < 0:
                     self.display_error("Invalid input")
                     return
@@ -335,27 +379,27 @@ class Calculator(ctk.CTk):
                 self.current_input = str(result)
                 self.update_display(self.current_input)
                 self.result_displayed = True
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 self.display_error("Error")
     
     def square(self):
         """Calculate square."""
         if self.current_input:
             try:
-                value = eval(self.current_input)
+                value = safe_eval(self.current_input)
                 result = value ** 2
                 self.add_to_history(f"({self.current_input})² = {result}")
                 self.current_input = str(result)
                 self.update_display(self.current_input)
                 self.result_displayed = True
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 self.display_error("Error")
     
     def reciprocal(self):
         """Calculate reciprocal."""
         if self.current_input:
             try:
-                value = eval(self.current_input)
+                value = safe_eval(self.current_input)
                 if value == 0:
                     self.display_error("Division by zero")
                     return
@@ -364,14 +408,14 @@ class Calculator(ctk.CTk):
                 self.current_input = str(result)
                 self.update_display(self.current_input)
                 self.result_displayed = True
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 self.display_error("Error")
     
     def trig_function(self, func: str):
         """Calculate trigonometric function."""
         if self.current_input:
             try:
-                value = eval(self.current_input)
+                value = safe_eval(self.current_input)
                 # Convert to radians (assume input is in degrees)
                 radians = math.radians(value)
                 
@@ -386,14 +430,14 @@ class Calculator(ctk.CTk):
                 self.current_input = str(result)
                 self.update_display(self.current_input)
                 self.result_displayed = True
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 self.display_error("Error")
     
     def log_function(self, func: str):
         """Calculate logarithm."""
         if self.current_input:
             try:
-                value = eval(self.current_input)
+                value = safe_eval(self.current_input)
                 if value <= 0:
                     self.display_error("Invalid input")
                     return
@@ -409,14 +453,14 @@ class Calculator(ctk.CTk):
                 self.current_input = str(result)
                 self.update_display(self.current_input)
                 self.result_displayed = True
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 self.display_error("Error")
     
     def factorial(self):
         """Calculate factorial."""
         if self.current_input:
             try:
-                value = eval(self.current_input)
+                value = safe_eval(self.current_input)
                 if value < 0 or not float(value).is_integer():
                     self.display_error("Invalid input")
                     return
@@ -425,20 +469,20 @@ class Calculator(ctk.CTk):
                 self.current_input = str(result)
                 self.update_display(self.current_input)
                 self.result_displayed = True
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 self.display_error("Error")
     
     def absolute(self):
         """Calculate absolute value."""
         if self.current_input:
             try:
-                value = eval(self.current_input)
+                value = safe_eval(self.current_input)
                 result = abs(value)
                 self.add_to_history(f"abs({self.current_input}) = {result}")
                 self.current_input = str(result)
                 self.update_display(self.current_input)
                 self.result_displayed = True
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 self.display_error("Error")
     
     def memory_clear(self):
@@ -456,20 +500,20 @@ class Calculator(ctk.CTk):
         """Add current value to memory."""
         if self.current_input:
             try:
-                value = eval(self.current_input)
+                value = safe_eval(self.current_input)
                 self.memory += value
                 self.update_memory_indicator()
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 pass
     
     def memory_subtract(self):
         """Subtract current value from memory."""
         if self.current_input:
             try:
-                value = eval(self.current_input)
+                value = safe_eval(self.current_input)
                 self.memory -= value
                 self.update_memory_indicator()
-            except:
+            except (ValueError, TypeError, ZeroDivisionError):
                 pass
     
     def update_memory_indicator(self):
