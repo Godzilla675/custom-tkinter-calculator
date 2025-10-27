@@ -30,6 +30,93 @@ import sympy as sp
 from sympy import symbols, solve, simplify, expand, factor, diff, integrate
 
 
+def preprocess_math_input(expression: str) -> str:
+    """
+    Preprocess mathematical expressions to make them more user-friendly.
+    Handles implicit multiplication, common notations, etc.
+    
+    Examples:
+        '2x' -> '2*x'
+        'x^2' -> 'x**2'
+        '2(x+1)' -> '2*(x+1)'
+        '(x)(y)' -> '(x)*(y)'
+        'sin x' -> 'sin(x)'
+        '2sin(x)' -> '2*sin(x)'
+    """
+    import re
+    
+    # First, replace ^ with **
+    expr = expression.replace('^', '**')
+    
+    # List of known mathematical functions  
+    known_funcs = ['sin', 'cos', 'tan', 'asin', 'acos', 'atan', 
+                   'sinh', 'cosh', 'tanh', 'log', 'ln', 'exp', 
+                   'sqrt', 'abs']
+    
+    # Step 1: Handle functions without parentheses (sin x -> sin(x))
+    for func in known_funcs:
+        pattern = rf'\b{func}\s+(?!\()([a-zA-Z_]\w*|\d+\.?\d*)'
+        expr = re.sub(pattern, rf'{func}(\1)', expr)
+    
+    # Step 2: Add multiplication for number followed by letter/function
+    # 2x -> 2*x, 2sin -> 2*sin
+    expr = re.sub(r'(\d)([a-zA-Z_])', r'\1*\2', expr)
+    
+    # Step 3: Add multiplication for number followed by opening paren
+    # 2(x) -> 2*(x)
+    expr = re.sub(r'(\d)\(', r'\1*(', expr)
+    
+    # Step 4: Add multiplication for closing paren followed by opening paren
+    # (x)(y) -> (x)*(y)
+    expr = re.sub(r'\)\s*\(', r')*(', expr)
+    
+    # Step 5: Add multiplication for closing paren followed by letter/digit
+    # )x -> )*x, )2 -> )*2
+    expr = re.sub(r'\)([a-zA-Z_0-9])', r')*\1', expr)
+    
+    # Step 6: Add multiplication for letter followed by opening paren (not a function)
+    # We do this by scanning and checking if identifier is not a function
+    parts = []
+    i = 0
+    while i < len(expr):
+        if expr[i] == '(' and i > 0:
+            # Look back to find the identifier
+            j = i - 1
+            while j >= 0 and (expr[j].isalnum() or expr[j] == '_'):
+                j -= 1
+            identifier = expr[j+1:i]
+            if identifier and identifier not in known_funcs and identifier.isalpha():
+                # Insert * before (
+                parts.append('*')
+        parts.append(expr[i])
+        i += 1
+    expr = ''.join(parts)
+    
+    # Step 7: Add multiplication between consecutive single letters (xy -> x*y)
+    # But avoid breaking function names
+    # We'll do this carefully by only splitting isolated single letters
+    result = []
+    i = 0
+    while i < len(expr):
+        result.append(expr[i])
+        if i < len(expr) - 1:
+            curr = expr[i]
+            next_char = expr[i + 1]
+            
+            # Check if we have two consecutive single letters
+            if curr.isalpha() and next_char.isalpha():
+                # Make sure current is not part of a longer identifier
+                prev_is_alnum = i > 0 and expr[i-1].isalnum()
+                next_next_is_alnum = i + 2 < len(expr) and expr[i+2].isalnum()
+                
+                # Only insert * if both are standalone single letters
+                if not prev_is_alnum and not next_next_is_alnum:
+                    result.append('*')
+        i += 1
+    
+    return ''.join(result)
+
+
 def safe_eval(expression: str) -> float:
     """
     Safely evaluate a mathematical expression without using eval().
@@ -280,7 +367,7 @@ class AdvancedCalculator(ctk.CTk):
         
         self.func_entry = ctk.CTkEntry(
             control_frame,
-            placeholder_text="e.g., sin(x), x**2, exp(x)",
+            placeholder_text="e.g., sin(x), x^2, 2x+1, exp(x)",
             width=400,
             font=("Arial", 12)
         )
@@ -380,7 +467,7 @@ class AdvancedCalculator(ctk.CTk):
         
         self.equation_entry = ctk.CTkEntry(
             input_frame,
-            placeholder_text="e.g., x**2 - 4*x + 4 = 0, 2*x + 5 = 11",
+            placeholder_text="e.g., x^2 - 4x + 4 = 0, 2x + 5 = 11",
             font=("Arial", 14),
             height=40
         )
@@ -1112,8 +1199,8 @@ class AdvancedCalculator(ctk.CTk):
             # Use sympy to evaluate the function safely
             x = sp.Symbol('x')
             
-            # Parse the function with sympy
-            func_str_clean = func_str.replace('^', '**')
+            # Preprocess the function string for user-friendly input
+            func_str_clean = preprocess_math_input(func_str)
             expr = sp.sympify(func_str_clean)
             
             # Convert to numpy function for vectorized evaluation
@@ -1157,8 +1244,8 @@ class AdvancedCalculator(ctk.CTk):
             # Use sympy to evaluate the function safely
             x = sp.Symbol('x')
             
-            # Parse the function with sympy
-            func_str_clean = func_str.replace('^', '**')
+            # Preprocess the function string for user-friendly input
+            func_str_clean = preprocess_math_input(func_str)
             expr = sp.sympify(func_str_clean)
             
             # Convert to numpy function for vectorized evaluation
@@ -1195,12 +1282,15 @@ class AdvancedCalculator(ctk.CTk):
             if not equation_str:
                 return
             
+            # Preprocess the equation string for user-friendly input
+            equation_str_clean = preprocess_math_input(equation_str)
+            
             # Parse equation
-            if '=' in equation_str:
-                left, right = equation_str.split('=')
+            if '=' in equation_str_clean:
+                left, right = equation_str_clean.split('=')
                 equation = sp.sympify(left) - sp.sympify(right)
             else:
-                equation = sp.sympify(equation_str)
+                equation = sp.sympify(equation_str_clean)
             
             # Detect all variables in the equation
             variables = list(equation.free_symbols)
@@ -1266,13 +1356,14 @@ class AdvancedCalculator(ctk.CTk):
             self.solver_result.delete("1.0", "end")
             self.solver_result.insert("1.0", f"Error solving equation: {str(e)}\n\n")
             self.solver_result.insert("end", "Make sure your equation is properly formatted.\n")
-            self.solver_result.insert("end", "Example: x**2 - 4*x + 4 = 0 or x + 2*y = 10")
+            self.solver_result.insert("end", "Example: x^2 - 4x + 4 = 0 or x + 2y = 10")
     
     def expand_expression(self):
         """Expand the expression."""
         try:
             expr_str = self.equation_entry.get().split('=')[0]
-            expr = sp.sympify(expr_str)
+            expr_str_clean = preprocess_math_input(expr_str)
+            expr = sp.sympify(expr_str_clean)
             result = expand(expr)
             
             self.solver_result.delete("1.0", "end")
@@ -1286,7 +1377,8 @@ class AdvancedCalculator(ctk.CTk):
         """Factor the expression."""
         try:
             expr_str = self.equation_entry.get().split('=')[0]
-            expr = sp.sympify(expr_str)
+            expr_str_clean = preprocess_math_input(expr_str)
+            expr = sp.sympify(expr_str_clean)
             result = factor(expr)
             
             self.solver_result.delete("1.0", "end")
@@ -1300,7 +1392,8 @@ class AdvancedCalculator(ctk.CTk):
         """Differentiate the expression."""
         try:
             expr_str = self.equation_entry.get().split('=')[0]
-            expr = sp.sympify(expr_str)
+            expr_str_clean = preprocess_math_input(expr_str)
+            expr = sp.sympify(expr_str_clean)
             
             # Detect all variables
             variables = list(expr.free_symbols)
@@ -1335,7 +1428,8 @@ class AdvancedCalculator(ctk.CTk):
         """Integrate the expression."""
         try:
             expr_str = self.equation_entry.get().split('=')[0]
-            expr = sp.sympify(expr_str)
+            expr_str_clean = preprocess_math_input(expr_str)
+            expr = sp.sympify(expr_str_clean)
             
             # Detect all variables
             variables = list(expr.free_symbols)
